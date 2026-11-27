@@ -33,17 +33,17 @@ const std::vector<Player>& Game::players() const noexcept {
 }
 
 std::optional<PlayerId> Game::currentPlayer() const noexcept {
-    if (result_) {
+    if (result_ || outcomePending_) {
         return std::nullopt;
     }
     return currentPlayer_;
 }
 
 std::vector<ActionOption> Game::availableActions() const {
-    if (result_) {
-        return {};
+    if (const auto player = currentPlayer()) {
+        return turnRules_.availableActions(*player);
     }
-    return turnRules_.availableActions(currentPlayer_);
+    return {};
 }
 
 std::size_t Game::completedTurns() const noexcept {
@@ -58,6 +58,9 @@ ActionResult Game::submitAction(PlayerId player, std::string_view actionId) {
     if (result_) {
         return {ActionStatus::Rejected, "The match has already ended."};
     }
+    if (outcomePending_) {
+        return {ActionStatus::Rejected, "The turn outcome is pending."};
+    }
     if (player != currentPlayer_) {
         return {ActionStatus::Rejected, "It is not that player's turn."};
     }
@@ -65,12 +68,26 @@ ActionResult Game::submitAction(PlayerId player, std::string_view actionId) {
     ActionResult action = turnRules_.apply(player, actionId);
     if (action.status == ActionStatus::TurnComplete) {
         ++completedTurns_;
-        result_ = outcomeRules_.evaluateAfterTurn(players_, player, completedTurns_);
-        if (!result_) {
-            currentPlayer_ = (currentPlayer_ + 1) % players_.size();
-        }
+        outcomePending_ = true;
+        resolvePendingOutcome();
     }
     return action;
+}
+
+bool Game::outcomePending() const noexcept {
+    return outcomePending_;
+}
+
+void Game::resolvePendingOutcome() {
+    if (!outcomePending_) {
+        return;
+    }
+
+    result_ = outcomeRules_.evaluateAfterTurn(players_, currentPlayer_, completedTurns_);
+    if (!result_) {
+        currentPlayer_ = (currentPlayer_ + 1) % players_.size();
+    }
+    outcomePending_ = false;
 }
 
 }  // namespace lo02

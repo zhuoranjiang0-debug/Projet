@@ -55,6 +55,8 @@ public:
     virtual ~OutcomeRules() = default;
 
     // Return no result while the match should continue.
+    // A failed evaluation can be retried with the same turn and board state.
+    // Throwing must leave the outcome rules ready to evaluate that turn again.
     virtual std::optional<GameResult> evaluateAfterTurn(
         const std::vector<Player>& players,
         PlayerId lastPlayer,
@@ -78,7 +80,13 @@ public:
     std::size_t completedTurns() const noexcept;
     const std::optional<GameResult>& result() const noexcept;
 
+    // If outcome evaluation throws, the turn is recorded and the match pauses.
     ActionResult submitAction(PlayerId player, std::string_view actionId);
+    bool outcomePending() const noexcept;
+
+    // Resolve the recorded turn without applying its action again.
+    // Does nothing when no outcome is pending. Evaluation errors propagate.
+    void resolvePendingOutcome();
 
 private:
     std::vector<Player> players_;
@@ -86,6 +94,7 @@ private:
     OutcomeRules& outcomeRules_;
     PlayerId currentPlayer_ = 0;
     std::size_t completedTurns_ = 0;
+    bool outcomePending_ = false;
     std::optional<GameResult> result_;
 };
 
